@@ -76,7 +76,10 @@ public class CAHListener extends ListenerAdapter {
         Pattern pattern2 = Pattern.compile("pick ([0-9]+) *", Pattern.CASE_INSENSITIVE);
         Matcher matcher2 = pattern2.matcher(message);
         if (message.equalsIgnoreCase("cards")) cah.getPlayer(sender).showCardsToPlayer();
-        else if (matcher1.matches() && cah.currentGameStatus == CardsAgainstHumanity.GameStatus.WaitingForCards && !cah.currentCzar.getName().equals(sender))
+        else if (message.equalsIgnoreCase("scores")) {
+            if (cah.currentGameStatus == CardsAgainstHumanity.GameStatus.Idle) return;
+            e.getUser().sendMessage(cah.getScoresString());
+        } else if (matcher1.matches() && cah.currentGameStatus == CardsAgainstHumanity.GameStatus.WaitingForCards && !cah.currentCzar.getName().equals(sender))
             cah.getPlayer(sender).playCard(matcher1.group(1));
         else if (matcher2.matches() && cah.currentGameStatus == CardsAgainstHumanity.GameStatus.ChoosingWinner && cah.currentCzar.getName().equals(sender))
             cah.pickWinner(matcher2.group(1));

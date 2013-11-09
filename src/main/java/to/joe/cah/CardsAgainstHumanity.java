@@ -415,6 +415,12 @@ public class CardsAgainstHumanity extends PircBotX {
         }, 45L, TimeUnit.SECONDS)); // 45 seconds
     }
 
+    protected String getScoresString() {
+        final StringBuilder sb = new StringBuilder();
+        for (Player p : allPlayers) sb.append("[").append(p.getName()).append(" ").append(p.getScore()).append("] ");
+        return sb.substring(0, sb.length() - 1);
+    }
+
     protected void stop() {
         cancelAllTasks();
         currentGameStatus = GameStatus.Idle;
