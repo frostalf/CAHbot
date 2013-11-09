@@ -3,7 +3,9 @@ package to.joe.cah;
 import org.kohsuke.args4j.CmdLineException;
 import org.kohsuke.args4j.CmdLineParser;
 import org.kohsuke.args4j.Option;
+import org.kohsuke.args4j.spi.LongOptionHandler;
 import org.kohsuke.args4j.spi.StringArrayOptionHandler;
+import org.kohsuke.args4j.spi.StringOptionHandler;
 import org.pircbotx.Colors;
 import org.pircbotx.PircBotX;
 
@@ -15,6 +17,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -31,6 +35,8 @@ public class CardsAgainstHumanity extends PircBotX {
     // TODO HOF
     // TODO Delay on remove from game on disconnect
 
+    private final List<Future> scheduledTasks = new ArrayList<Future>();
+
     protected enum GameStatus {
         Idle, // No game is playing
         WaitingForPlayers, // 30 second period where players should join
@@ -41,14 +47,20 @@ public class CardsAgainstHumanity extends PircBotX {
     // \x03#,# \u0003 Colors
     // \x02 \u0002 Bold
 
-    @Option(name = "-c", usage = "Sets the channel", required = true)
+    @Option(name = "-c", usage = "Sets the channel (e.g. \"#cah\")", required = true, handler = StringOptionHandler.class)
     protected String gameChannel;
-    @Option(name = "-s", usage = "Sets the server", required = true)
+    @Option(name = "-s", usage = "Sets the server (e.g. \"irc.esper.net\")", required = true, handler = StringOptionHandler.class)
     protected String ircNetwork;
-    @Option(name = "-n", usage = "Sets the bot's nickname")
+    @Option(name = "-n", usage = "Sets the bot's nickname (e.g. \"CAHBot\")", handler = StringOptionHandler.class)
     protected String botNick = "CAHBot";
-    @Option(name = "-p", usage = "Sets the card packs to be used", handler = StringArrayOptionHandler.class)
+    @Option(name = "-P", usage = "Sets the password to be used for NickServ", handler = StringOptionHandler.class)
+    private String nickservPassword = "";
+    @Option(name = "-p", usage = "Sets the card packs to be used, space-delimited (e.g. \"FirstVersion SecondExpansion\")", handler = StringArrayOptionHandler.class)
     protected String[] cardPacks = new String[0];
+    @Option(name = "-a", usage = "Raw IRC line to be sent for authentication", handler = StringOptionHandler.class)
+    private String authLine = "";
+    @Option(name = "-d", usage = "Sets the delay between messages sent from the bot in milliseconds", handler = LongOptionHandler.class)
+    private long messageDelay = 2300L;
 
     public static void main(String[] args) throws Exception {
         final CardsAgainstHumanity bot = new CardsAgainstHumanity();
@@ -108,8 +120,10 @@ public class CardsAgainstHumanity extends PircBotX {
         this.setName(botNick);
         this.setVerbose(true);
         this.connect(ircNetwork);
+        if (!nickservPassword.isEmpty()) this.identify(nickservPassword);
+        if (!authLine.isEmpty()) this.sendRawLineNow(authLine);
         this.joinChannel(gameChannel);
-        this.setMessageDelay(2300);
+        this.setMessageDelay(messageDelay);
     }
 
     private void parseCommandLine(String[] args) {
@@ -143,6 +157,31 @@ public class CardsAgainstHumanity extends PircBotX {
             }
             this.message(currentCzar.getName() + ": Pick the best white card");
             currentGameStatus = GameStatus.ChoosingWinner;
+        }
+    }
+
+    private void cancelAllTasks() {
+        final List<Future> removedTasks = new ArrayList<Future>();
+        synchronized (scheduledTasks) {
+            for (Future ft : scheduledTasks) {
+                ft.cancel(true);
+                removedTasks.add(ft);
+            }
+            scheduledTasks.removeAll(removedTasks);
+        }
+    }
+
+    private void cancelTask(Future ft) {
+        ft.cancel(true);
+        synchronized (scheduledTasks) {
+            if (!scheduledTasks.contains(ft)) return;
+            scheduledTasks.remove(ft);
+        }
+    }
+
+    private void registerTask(Future ft) {
+        synchronized (scheduledTasks) {
+            scheduledTasks.add(ft);
         }
     }
 
@@ -351,18 +390,17 @@ public class CardsAgainstHumanity extends PircBotX {
 
         currentGameStatus = GameStatus.WaitingForPlayers;
 
-        stpe.schedule(new Runnable() {
+        registerTask(stpe.schedule(new Runnable() {
             public void run() {
                 message("Game starts in 30 seconds.");
             }
-        }, 15L, TimeUnit.SECONDS);
-
-        stpe.schedule(new Runnable() {
+        }, 15L, TimeUnit.SECONDS));
+        registerTask(stpe.schedule(new Runnable() {
             public void run() {
                 message("Game starts in 15 seconds.");
             }
-        }, 30L, TimeUnit.SECONDS);
-        stpe.schedule(new Runnable() {
+        }, 30L, TimeUnit.SECONDS));
+        registerTask(stpe.schedule(new Runnable() {
             public void run() {
                 if (currentPlayers.size() < 3) {
                     message("Not enough players to start a game; three are required.");
@@ -374,10 +412,11 @@ public class CardsAgainstHumanity extends PircBotX {
                 message("Game starting now!");
                 CardsAgainstHumanity.this.nextTurn(currentPlayers.get(0));
             }
-        }, 45L, TimeUnit.SECONDS); // 45 seconds
+        }, 45L, TimeUnit.SECONDS)); // 45 seconds
     }
 
     protected void stop() {
+        cancelAllTasks();
         currentGameStatus = GameStatus.Idle;
         currentCzar = null;
         this.message("The game is over!");
