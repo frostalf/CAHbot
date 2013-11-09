@@ -87,8 +87,13 @@ public class CardsAgainstHumanity extends PircBotX {
             final BufferedReader br = new BufferedReader(new FileReader(f));
             String line;
             while ((line = br.readLine()) != null) {
-                if (line.equalsIgnoreCase("___WHITE___")) cpt = CardPackType.WHITE;
-                else if (line.equalsIgnoreCase("___BLACK___")) cpt = CardPackType.BLACK;
+                if (line.equalsIgnoreCase("___WHITE___")) {
+                    cpt = CardPackType.WHITE;
+                    continue; // don't actually add this card
+                } else if (line.equalsIgnoreCase("___BLACK___")) {
+                    cpt = CardPackType.BLACK;
+                    continue; // don't actually add this card
+                }
                 if (line.trim().isEmpty()) continue; // don't add empty lines
                 if (cpt == CardPackType.WHITE) originalWhiteCards.add(line);
                 else originalBlackCards.add(line);
