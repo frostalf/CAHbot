@@ -305,15 +305,14 @@ public class CardsAgainstHumanity extends PircBotX {
 
     private void newCzar(Player czar) {
         if (czar == null) {
-            Player oldCzar = currentCzar;
-            ArrayList<Player> contestants = new ArrayList<Player>(currentPlayers);
-            contestants.remove(oldCzar);
-            Collections.shuffle(contestants);
-            newCzar(contestants.get(0));
-            return;
+            int index = currentPlayers.indexOf(currentCzar);
+            if (index++ > currentPlayers.size() - 1) {
+                index = 0;
+            }
+            czar = currentPlayers.get(index);
         }
         currentCzar = czar;
-        this.message(currentCzar.getName() + " is the next czar");
+        this.message(currentCzar.getName() + " is the next czar.");
     }
 
     private void nextTurn() {
