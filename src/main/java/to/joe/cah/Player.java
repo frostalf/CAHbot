@@ -70,6 +70,7 @@ public class Player {
         HashSet<String> playedCards = new HashSet<String>(cardsToRemove);
         if (playedCards.size() != cardsToRemove.size()) {
             ircBot.message(getName() + ": You can't play the same card twice");
+            playedCard = null; // fix bug
             return;
         }
         for (String card : cardsToRemove) {
