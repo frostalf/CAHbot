@@ -15,7 +15,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -65,7 +64,7 @@ public class CardsAgainstHumanity extends PircBotX {
     private ArrayList<String> originalWhiteCards = new ArrayList<String>();
     private ArrayList<String> activeWhiteCards = new ArrayList<String>();
     private String currentBlackCard;
-    private ScheduledThreadPoolExecutor stpe = (ScheduledThreadPoolExecutor) Executors.newSingleThreadScheduledExecutor();
+    private ScheduledThreadPoolExecutor stpe = new ScheduledThreadPoolExecutor(1);
     protected GameStatus currentGameStatus = GameStatus.Idle;
     protected Player currentCzar;
     public int requiredAnswers = 1;
