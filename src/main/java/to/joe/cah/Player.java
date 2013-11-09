@@ -49,7 +49,7 @@ public class Player {
         playedCard = "";
         for (String s : cardStrings) {
             System.out.println("Attempting to parse " + "\"" + s.replaceAll(" ", "") + "\"");
-            int cardNumber = 0;
+            int cardNumber;
             try {
                 cardNumber = Integer.parseInt(s);
             } catch (NumberFormatException e) {
@@ -93,10 +93,10 @@ public class Player {
             cards += cardNumber + ") \u00031,0[" + c + "]\u0003  ";
             cardNumber++;
         }
-        ircBot.sendNotice(getName(), cards);
-        // ircBot.sendMessage(getName(), cards);
+        ircBot.sendMessage(getName(), cards);
+        //ircBot.sendNotice(getName(), cards);
     }
-    
+
     public void wipePlayedCard() {
         this.playedCard = null;
     }
@@ -105,18 +105,15 @@ public class Player {
     public String toString() {
         return "Player{" + "name=" + getName() + '}';
     }
-    
+
     @Override
     public boolean equals(Object object) {
         if(object instanceof Player) {
             return ((Player) object).name.equalsIgnoreCase(this.name);
         }
-        if(object instanceof String) {
-            return ((String) object).equalsIgnoreCase(this.name);
-        }
-        return false;
+        return object instanceof String && ((String) object).equalsIgnoreCase(this.name);
     }
-    
+
     @Override
     public int hashCode() {
         return name.toLowerCase().hashCode();

@@ -1,5 +1,12 @@
 package to.joe.cah;
 
+import org.kohsuke.args4j.CmdLineException;
+import org.kohsuke.args4j.CmdLineParser;
+import org.kohsuke.args4j.Option;
+import org.kohsuke.args4j.spi.StringArrayOptionHandler;
+import org.pircbotx.Colors;
+import org.pircbotx.PircBotX;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -8,16 +15,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
-import org.jibble.pircbot.Colors;
-import org.jibble.pircbot.PircBot;
-
-public class CardsAgainstHumanity extends PircBot {
+public class CardsAgainstHumanity extends PircBotX {
 
     // TODO don't let people spam join/leave
     // TODO Shortcuts
@@ -30,7 +32,7 @@ public class CardsAgainstHumanity extends PircBot {
     // TODO HOF
     // TODO Delay on remove from game on disconnect
 
-    enum GameStatus {
+    protected enum GameStatus {
         Idle, // No game is playing
         WaitingForPlayers, // 30 second period where players should join
         WaitingForCards, // Waiting for all players to play cards
@@ -40,18 +42,22 @@ public class CardsAgainstHumanity extends PircBot {
     // \x03#,# \u0003 Colors
     // \x02 \u0002 Bold
 
-    final static String gameChannel = "#joe.to";
+    @Option(name = "-c", usage = "Sets the channel", required = true)
+    protected String gameChannel;
+    @Option(name = "-s", usage = "Sets the server", required = true)
+    protected String ircNetwork;
+    @Option(name = "-n", usage = "Sets the bot's nickname")
+    protected String botNick = "CAHBot";
+    @Option(name = "-p", usage = "Sets the card packs to be used", handler = StringArrayOptionHandler.class)
+    protected String[] cardPacks = new String[0];
 
     public static void main(String[] args) throws Exception {
-        CardsAgainstHumanity bot = new CardsAgainstHumanity("CAHBot");
-        bot.setVerbose(true);
-        bot.connect("irc.gamesurge.net");
-        bot.joinChannel(gameChannel);
-        bot.setMessageDelay(2300);
+        final CardsAgainstHumanity bot = new CardsAgainstHumanity();
+        bot.doMain(args);
     }
 
-    private ArrayList<Player> currentPlayers = new ArrayList<Player>();
-    private ArrayList<Player> allPlayers = new ArrayList<Player>();
+    protected ArrayList<Player> currentPlayers = new ArrayList<Player>();
+    protected ArrayList<Player> allPlayers = new ArrayList<Player>();
     // private ArrayList<Player> blacklist = new ArrayList<Player>();
     private ArrayList<Player> currentShuffledPlayers;
     private ArrayList<String> originalBlackCards = new ArrayList<String>();
@@ -59,33 +65,59 @@ public class CardsAgainstHumanity extends PircBot {
     private ArrayList<String> originalWhiteCards = new ArrayList<String>();
     private ArrayList<String> activeWhiteCards = new ArrayList<String>();
     private String currentBlackCard;
-    private Timer timer = new Timer();
-    private GameStatus currentGameStatus = GameStatus.Idle;
-    private Player currentCzar;
+    private ScheduledThreadPoolExecutor stpe = (ScheduledThreadPoolExecutor) Executors.newSingleThreadScheduledExecutor();
+    protected GameStatus currentGameStatus = GameStatus.Idle;
+    protected Player currentCzar;
     public int requiredAnswers = 1;
 
-    public CardsAgainstHumanity(String botName) throws Exception {
-        this.setName(botName);
-        File blackFile = new File("black.txt");
-        File whiteFile = new File("white.txt");
-        this.ifNotExists(blackFile, whiteFile);
+    private enum CardPackType {
+        BLACK, WHITE
+    }
 
-        FileReader fileReader = new FileReader(blackFile);
-        BufferedReader bufferedReader = new BufferedReader(fileReader);
-        String line;
-        while ((line = bufferedReader.readLine()) != null) {
-            originalBlackCards.add(line);
+    private void addCardPacks() throws Exception {
+        if (cardPacks.length < 1) cardPacks = new String[]{"FirstVersion"};
+        for (String name : cardPacks) {
+            final File f = new File(name + ".txt");
+            ifNotExists(f);
+            if (!f.exists()) {
+                System.out.println("Could not find \"" + f.getName() + "\". Skipping.");
+                continue;
+            }
+            CardPackType cpt = CardPackType.BLACK;
+            final BufferedReader br = new BufferedReader(new FileReader(f));
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.equalsIgnoreCase("___WHITE___")) cpt = CardPackType.WHITE;
+                else if (line.equalsIgnoreCase("___BLACK___")) cpt = CardPackType.BLACK;
+                if (line.trim().isEmpty()) continue; // don't add empty lines
+                if (cpt == CardPackType.WHITE) originalWhiteCards.add(line);
+                else originalBlackCards.add(line);
+            }
+            br.close();
         }
-        fileReader.close();
-        bufferedReader.close();
+    }
 
-        fileReader = new FileReader("white.txt");
-        bufferedReader = new BufferedReader(fileReader);
-        while ((line = bufferedReader.readLine()) != null) {
-            originalWhiteCards.add(line);
+    private void doMain(String[] args) throws Exception {
+        parseCommandLine(args);
+        addCardPacks();
+        this.getListenerManager().addListener(new CAHListener(this));
+        this.setName(botNick);
+        this.setVerbose(true);
+        this.connect(ircNetwork);
+        this.joinChannel(gameChannel);
+        this.setMessageDelay(2300);
+    }
+
+    private void parseCommandLine(String[] args) {
+        final CmdLineParser clp = new CmdLineParser(this);
+        try {
+            clp.parseArgument(args);
+            if (clp.getOptions().size() < 2) throw new CmdLineException(clp, "Not enough options!");
+        } catch (CmdLineException e) {
+            System.out.println(e.getMessage());
+            e.getParser().printUsage(System.out);
+            System.exit(1);
         }
-        fileReader.close();
-        bufferedReader.close();
     }
 
     public void checkForPlayedCards() {
@@ -110,7 +142,7 @@ public class CardsAgainstHumanity extends PircBot {
         }
     }
 
-    private void drop(String name) {
+    protected void drop(String name) {
         Player player = getPlayer(name);
         if (player == null) {
             return;
@@ -144,9 +176,9 @@ public class CardsAgainstHumanity extends PircBot {
         }
     }
 
-    private Player getPlayer(String name) {
+    protected Player getPlayer(String name) {
         for (Player player : currentPlayers) {
-            if (player.equals(name))
+            if (player.getName().equals(name)) // Can't compare Player and String
                 return player;
         }
         return null;
@@ -159,8 +191,9 @@ public class CardsAgainstHumanity extends PircBot {
             }
             System.out.println("Saving " + file);
             InputStream inputStream = CardsAgainstHumanity.class.getClassLoader().getResourceAsStream(file.getName());
+            if (inputStream == null) return;
             try {
-                file.createNewFile();
+                if (!file.createNewFile()) throw new IOException("Could not create file \"" + file.getName() + "\"");
                 FileOutputStream outputStream = new FileOutputStream(file);
                 byte buffer[] = new byte[1024];
                 int length;
@@ -175,7 +208,7 @@ public class CardsAgainstHumanity extends PircBot {
         }
     }
 
-    private void join(String name) {
+    protected void join(String name) {
         if (currentGameStatus == GameStatus.Idle) {
             this.message("There is no game currently playing. Try starting one with !cah start");
             return;
@@ -192,7 +225,7 @@ public class CardsAgainstHumanity extends PircBot {
          * return; } }
          */
         for (Player player : allPlayers) {
-            if (player.equals(name)) {
+            if (player.getName().equals(name)) { // can't compare Player and String
                 currentPlayers.add(player);
                 this.message(Colors.BOLD + name + " rejoins this game of Cards Against Humanity!");
                 return;
@@ -208,7 +241,7 @@ public class CardsAgainstHumanity extends PircBot {
         this.sendMessage(gameChannel, message);
     }
 
-    private void nag(String sender) {
+    protected void nag() { // Remove unused argument (String sender)
         if (currentGameStatus == GameStatus.WaitingForCards) {
             String missingPlayers = "";
             for (Player player : currentPlayers) {
@@ -252,10 +285,10 @@ public class CardsAgainstHumanity extends PircBot {
         }
         currentBlackCard = "\u00030,1" + activeBlackCards.remove(0) + "\u0003";
         requiredAnswers = this.countMatches(currentBlackCard, "_");
-        currentBlackCard.replaceAll("_", "<BLANK>");
+        currentBlackCard = currentBlackCard.replace("_", "<BLANK>"); // Actually assign this value
         this.message("The next black card is " + Colors.BOLD + "\"" + currentBlackCard + "\"");
         if (requiredAnswers > 1)
-            message("Be sure to play " + requiredAnswers + " white cards this round");
+            message("Be sure to play " + requiredAnswers + " white cards this round.");
         currentGameStatus = GameStatus.WaitingForCards;
         for (Player player : currentPlayers) {
             player.wipePlayedCard();
@@ -282,104 +315,28 @@ public class CardsAgainstHumanity extends PircBot {
         return activeWhiteCards.remove(0);
     }
 
-    @Override
-    public void onKick(String channel, String kickerNick, String kickerLogin, String kickerHostname, String recipientNick, String reason) {
-        drop(recipientNick);
-    }
-
-    @Override
-    public void onMessage(String channel, String sender, String login, String hostname, String message) {
-        Pattern pattern1 = Pattern.compile("play ((?:[0-9]+ ?){" + requiredAnswers + "}) *", Pattern.CASE_INSENSITIVE);
-        Matcher matcher1 = pattern1.matcher(message);
-
-        Pattern pattern2 = Pattern.compile("pick ([0-9]+) *", Pattern.CASE_INSENSITIVE);
-        Matcher matcher2 = pattern2.matcher(message);
-
-        Pattern pattern3 = Pattern.compile("!cah boot ([a-zA-Z0-9]+) *", Pattern.CASE_INSENSITIVE);
-        Matcher matcher3 = pattern3.matcher(message);
-
-        if (!channel.equalsIgnoreCase(CardsAgainstHumanity.gameChannel))
-            return;
-        else if (message.equalsIgnoreCase("!cah join"))
-            join(sender);
-        else if (message.equalsIgnoreCase("!cah drop"))
-            drop(sender);
-        else if (message.equalsIgnoreCase("!cah start") && currentGameStatus == GameStatus.Idle)
-            start();
-        else if (message.equalsIgnoreCase("!cah stop"))
-            stop();
-        else if (message.equalsIgnoreCase("cards"))
-            getPlayer(sender).showCardsToPlayer();
-        else if (matcher1.matches() && currentGameStatus == GameStatus.WaitingForCards && !currentCzar.getName().equals(sender))
-            getPlayer(sender).playCard(matcher1.group(1));
-        else if (matcher2.matches() && currentGameStatus == GameStatus.ChoosingWinner && currentCzar.getName().equals(sender))
-            pickWinner(matcher2.group(1));
-        else if (message.equalsIgnoreCase("turn"))
-            nag(sender);
-        else if (message.equalsIgnoreCase("check"))
-            checkForPlayedCards();
-        else if (matcher3.matches()) {
-            drop(matcher3.group(1));
-        }
-    }
-
-    @Override
-    public void onNickChange(String oldNick, String login, String hostname, String newNick) {
-        for (Player player : allPlayers) {
-            if (player.equals(oldNick)) {
-                player.setName(newNick);
-                return;
-            }
-        }
-        for (Player player : currentPlayers) {
-            if (player.equals(oldNick)) {
-                player.setName(newNick);
-                return;
-            }
-        }
-    }
-
-    @Override
-    public void onPart(String channel, String sender, String login, String hostname) {
-        drop(sender);
-    }
-
-    @Override
-    public void onQuit(String sourceNick, String sourceLogin, String sourceHostname, String reason) {
-        if (!sourceNick.equals(this.getNick()))
-            drop(sourceNick);
-        else {
-            try {
-                this.connect("irc.gamesurge.net");
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            this.joinChannel(gameChannel);
-        }
-    }
-
-    private void pickWinner(String winningNumber) {
-        int cardNumber = 0;
+    protected void pickWinner(String winningNumber) {
+        int cardNumber;
         try {
             cardNumber = Integer.parseInt(winningNumber);
         } catch (NumberFormatException e) {
-            this.message(currentCzar.getName() + ": You have picked an invalid card, pick again");
+            this.message(currentCzar.getName() + ": You have picked an invalid card; pick again.");
             return;
         }
         Player winningPlayer;
         try {
             winningPlayer = currentShuffledPlayers.get(cardNumber - 1);
         } catch (IndexOutOfBoundsException e) {
-            this.message(currentCzar.getName() + ": You have picked an invalid card, pick again");
+            this.message(currentCzar.getName() + ": You have picked an invalid card; pick again.");
             return;
         }
         String winningCard = winningPlayer.getPlayedCard();
-        this.message("The winning card is " + winningCard + "played by " + Colors.BOLD + winningPlayer.getName() + Colors.NORMAL + ". " + Colors.BOLD + winningPlayer.getName() + Colors.NORMAL + " is awarded one point");
+        this.message("The winning card is " + winningCard + "played by " + Colors.BOLD + winningPlayer.getName() + Colors.NORMAL + ". " + Colors.BOLD + winningPlayer.getName() + Colors.NORMAL + " is awarded one point.");
         winningPlayer.addPoint();
         nextTurn();
     }
 
-    private void start() {
+    protected void start() {
         activeBlackCards = new ArrayList<String>(originalBlackCards);
         activeWhiteCards = new ArrayList<String>(originalWhiteCards);
 
@@ -390,24 +347,21 @@ public class CardsAgainstHumanity extends PircBot {
 
         currentGameStatus = GameStatus.WaitingForPlayers;
 
-        timer.schedule(new TimerTask() {
-            @Override
+        stpe.schedule(new Runnable() {
             public void run() {
-                message("Game starts in 30 seconds");
+                message("Game starts in 30 seconds.");
             }
-        }, 15000);
+        }, 15L, TimeUnit.SECONDS);
 
-        timer.schedule(new TimerTask() {
-            @Override
+        stpe.schedule(new Runnable() {
             public void run() {
-                message("Game starts in 15 seconds");
+                message("Game starts in 15 seconds.");
             }
-        }, 30000);
-        timer.schedule(new TimerTask() {
-            @Override
+        }, 30L, TimeUnit.SECONDS);
+        stpe.schedule(new Runnable() {
             public void run() {
                 if (currentPlayers.size() < 3) {
-                    message("Not enough players to start a game");
+                    message("Not enough players to start a game; three are required.");
                     currentPlayers.clear();
                     currentGameStatus = GameStatus.Idle;
                     return;
@@ -416,10 +370,10 @@ public class CardsAgainstHumanity extends PircBot {
                 message("Game starting now!");
                 CardsAgainstHumanity.this.nextTurn(currentPlayers.get(0));
             }
-        }, 45000); // 45 seconds
+        }, 45L, TimeUnit.SECONDS); // 45 seconds
     }
 
-    private void stop() {
+    protected void stop() {
         currentGameStatus = GameStatus.Idle;
         currentCzar = null;
         this.message("The game is over!");
