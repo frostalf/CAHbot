@@ -404,6 +404,7 @@ public class CardsAgainstHumanity extends PircBotX {
                 if (currentPlayers.size() < 3) {
                     message("Not enough players to start a game; three are required.");
                     currentPlayers.clear();
+                    allPlayers.clear();
                     currentGameStatus = GameStatus.Idle;
                     return;
                 }
