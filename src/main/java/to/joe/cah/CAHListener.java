@@ -47,6 +47,8 @@ public class CAHListener extends ListenerAdapter {
         final String sender = e.getUser().getNick();
         Pattern pattern3 = Pattern.compile("!cah boot ([a-zA-Z0-9]+) *", Pattern.CASE_INSENSITIVE);
         Matcher matcher3 = pattern3.matcher(message);
+        Pattern pattern2 = Pattern.compile("pick ([0-9]+) *", Pattern.CASE_INSENSITIVE);
+        Matcher matcher2 = pattern2.matcher(message);
         if (!channel.equalsIgnoreCase(cah.gameChannel)) return;
         if (message.equalsIgnoreCase("!cah join")) // fix faulty if
             cah.join(sender);
@@ -61,6 +63,8 @@ public class CAHListener extends ListenerAdapter {
         else if (message.equalsIgnoreCase("check"))
             cah.checkForPlayedCards();
         else if (matcher3.matches()) cah.drop(matcher3.group(1));
+        else if (matcher2.matches() && cah.currentGameStatus == CardsAgainstHumanity.GameStatus.ChoosingWinner && cah.currentCzar.getName().equals(sender))
+            cah.pickWinner(matcher2.group(1));
     }
 
     public void onPrivateMessage(PrivateMessageEvent e) {
