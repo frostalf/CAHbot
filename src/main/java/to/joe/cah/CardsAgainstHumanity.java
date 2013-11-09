@@ -130,7 +130,6 @@ public class CardsAgainstHumanity extends PircBotX {
         final CmdLineParser clp = new CmdLineParser(this);
         try {
             clp.parseArgument(args);
-            if (clp.getOptions().size() < 2) throw new CmdLineException(clp, "Not enough options!");
         } catch (CmdLineException e) {
             System.out.println(e.getMessage());
             e.getParser().printUsage(System.out);
@@ -145,7 +144,7 @@ public class CardsAgainstHumanity extends PircBotX {
                 playedCardsCount++;
         }
         if (playedCardsCount + 1 == currentPlayers.size()) {
-            this.message("All players have played their white cards");
+            this.message("All players have played their white cards.");
             this.message("The black card is " + Colors.BOLD + "\"" + currentBlackCard + "\"" + Colors.NORMAL + " The white cards are:");
             playedCardsCount = 0;
             currentShuffledPlayers = new ArrayList<Player>(currentPlayers);
@@ -155,7 +154,7 @@ public class CardsAgainstHumanity extends PircBotX {
                 playedCardsCount++;
                 this.message(playedCardsCount + ") " + player.getPlayedCard());
             }
-            this.message(currentCzar.getName() + ": Pick the best white card");
+            this.message(currentCzar.getName() + ": Pick the best white card.");
             currentGameStatus = GameStatus.ChoosingWinner;
         }
     }
@@ -293,9 +292,9 @@ public class CardsAgainstHumanity extends PircBotX {
                     missingPlayers += player.getName() + " ";
                 }
             }
-            this.message("Waiting for " + missingPlayers + "to submit cards");
+            this.message("Waiting for " + missingPlayers + "to submit cards.");
         } else if (currentGameStatus == GameStatus.ChoosingWinner) {
-            this.message("Waiting for " + currentCzar.getName() + " to pick the winning card");
+            this.message("Waiting for " + currentCzar.getName() + " to pick the winning card.");
         }
     }
 

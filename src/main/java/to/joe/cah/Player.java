@@ -41,7 +41,7 @@ public class Player {
 
     public void playCard(String cardString) {
         if (playedCard != null) {
-            ircBot.message(getName() + ": You can't play twice");
+            ircBot.message(getName() + ": You can't play twice.");
             return;
         }
         String[] cardStrings = cardString.split(" ");
@@ -53,7 +53,7 @@ public class Player {
             try {
                 cardNumber = Integer.parseInt(s);
             } catch (NumberFormatException e) {
-                ircBot.message(getName() + ": You have picked an invalid card, pick again");
+                ircBot.message(getName() + ": You have picked an invalid card, pick again.");
                 return;
             }
             cardNumber--;
@@ -62,7 +62,7 @@ public class Player {
                 cardsToRemove.add(whiteCards.get(cardNumber));
             } catch (IndexOutOfBoundsException e) {
                 cardNumber++;
-                ircBot.message(getName() + ": You do not appear to have a " + cardNumber + ircBot.getOrdinal(cardNumber) + " card to play");
+                ircBot.message(getName() + ": You do not appear to have a " + cardNumber + ircBot.getOrdinal(cardNumber) + " card to play.");
                 playedCard = null;
                 return;
             }
